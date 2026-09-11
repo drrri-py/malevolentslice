@@ -1,0 +1,109 @@
+# ==========================================
+# Byte-compiled / Python Cache Files
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# ==========================================
+# Packaging, Distribution & Build Artifacts
+# ==========================================
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ==========================================
+# Virtual Environments
+# ==========================================
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# ==========================================
+# Testing, Coverage & Type Checking
+# ==========================================
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.noserc
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.cache/
+.ruff_cache/
+.mypy_cache/
+
+# ==========================================
+# Logs & Audit Reports
+# ==========================================
+*.log
+processing_audit.log
+
+# ==========================================
+# Audio Datasets, Test Inputs & Outputs
+# ==========================================
+# Berkas audio tidak boleh masuk ke git agar repositori tidak membengkak
+*.wav
+*.mp3
+*.flac
+*.ogg
+*.m4a
+*.aac
+*.wma
+
+# Folder dataset audio masukan & luaran serta folder uji coba
+raw/
+raw_*/
+dataset/
+dataset_*/
+test_dataset/
+data/
+output/
+outputs/
+a/
+
+# ==========================================
+# IDE, Editor & Operating System Files
+# ==========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ==========================================
+# Catatan & Dokumen Pribadi (Opsional)
+# ==========================================
+# Hilangkan tanda '#' di bawah ini jika tidak ingin naskah skripsi terunggah ke GitHub publik:
+# skripsi*.md
+# *.docx
+# *.pdf
