@@ -57,7 +57,7 @@ pip install malevolentslice
 ### Mode Pengembangan (Development)
 Jika Anda mengkloning repositori ini secara lokal:
 ```bash
-git clone https://github.com/fidriyani/malevolentslice.git
+git clone https://github.com/drrri-py/malevolentslice.git
 cd malevolentslice
 
 # Pasang dalam mode editable beserta dependensi dev (pengujian & profiler)

@@ -43,9 +43,9 @@ dependencies = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/fidriyani/malevolentslice"
-"Repository" = "https://github.com/fidriyani/malevolentslice"
-"Bug Tracker" = "https://github.com/fidriyani/malevolentslice/issues"
+"Homepage" = "https://github.com/drrri-py/malevolentslice"
+"Repository" = "https://github.com/drrri-py/malevolentslice"
+"Bug Tracker" = "https://github.com/drrri-py/malevolentslice/issues"
 
 [project.optional-dependencies]
 dev = [
