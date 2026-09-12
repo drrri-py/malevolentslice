@@ -1,11 +1,13 @@
 # MalevolentSlice
 
-[![PyPI Version](https://img.shields.io/pypi/v/malevolentslice.svg?color=blue)](https://pypi.org/project/malevolentslice/)
-[![Python Versions](https://img.shields.io/pypi/pyversions/malevolentslice.svg)](https://pypi.org/project/malevolentslice/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![PyPI Version](https://img.shields.io/pypi/v/malevolentslice.svg?color=blue)]()
+[![Python Versions](https://img.shields.io/pypi/pyversions/malevolentslice.svg)]()
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/drrri-py/malevolentslice/blob/main/LICENSE)
 [![RAM Footprint](https://img.shields.io/badge/RAM_Footprint-O(1)_%E2%89%A4_100MB-brightgreen.svg)]()
 
 > **DESIGN AND IMPLEMENTATION OF A VOICE ACTIVITY DETECTION-BASED AUDIO DATASET SEGMENTATION SYSTEM FOR MEMORY-EFFICIENT TEXT-TO-SPEECH**  
+
+
 > *RANCANG BANGUN SISTEM SEGMENTASI DATASET AUDIO BERBASIS VOICE ACTIVITY DETECTION UNTUK PENGEMBANGAN TEXT-TO-SPEECH EFISIEN MEMORI RAM*
 
 ---
@@ -284,4 +286,4 @@ pytest -v
 
 ## 📄 Lisensi
 
-Proyek ini dilisensikan di bawah lisensi [MIT](LICENSE).
+Proyek ini dilisensikan di bawah lisensi [MIT](https://github.com/drrri-py/malevolentslice/blob/main/LICENSE).

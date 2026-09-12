@@ -1,6 +1,6 @@
 [project]
 name = "malevolentslice"
-version = "0.1.0"
+version = "0.1.1"
 description = "Memory-efficient VAD-based audio dataset segmentation for TTS training"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -22,6 +22,7 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
@@ -46,6 +47,7 @@ dependencies = [
 "Homepage" = "https://github.com/drrri-py/malevolentslice"
 "Repository" = "https://github.com/drrri-py/malevolentslice"
 "Bug Tracker" = "https://github.com/drrri-py/malevolentslice/issues"
+"License" = "https://github.com/drrri-py/malevolentslice/blob/main/LICENSE"
 
 [project.optional-dependencies]
 dev = [
