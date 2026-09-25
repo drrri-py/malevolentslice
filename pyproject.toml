@@ -1,6 +1,6 @@
 [project]
 name = "malevolentslice"
-version = "0.1.4"
+version = "0.1.5"
 description = "Memory-efficient VAD-based audio dataset segmentation for TTS training"
 readme = "README.md"
 requires-python = ">=3.8"

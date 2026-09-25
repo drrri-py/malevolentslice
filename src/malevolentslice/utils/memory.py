@@ -7,9 +7,19 @@ def force_garbage_collection() -> None:
     gc.collect()
 
 def get_memory_usage_mb() -> float:
-    """Returns the current process Resident Set Size (RSS) memory consumption in MB."""
+    """
+    Returns the current process memory consumption in MB.
+    On macOS (Darwin), RSS artificially includes shared system dynamic library
+    caches (Accelerate framework, dyld cache, etc.) which can inflate the
+    reported metric by 300-400 MB. We use 'phys_footprint' on macOS, which is
+    Apple's official and accurate metric for actual physical RAM allocation.
+    On Windows and Linux, RSS accurately represents the process Working Set / VmRSS.
+    """
     process = psutil.Process(os.getpid())
-    return process.memory_info().rss / (1024.0 * 1024.0)
+    mem_info = process.memory_info()
+    if hasattr(mem_info, "phys_footprint"):
+        return mem_info.phys_footprint / (1024.0 * 1024.0)
+    return mem_info.rss / (1024.0 * 1024.0)
 
 class MemoryTracker:
     """Context manager and tracker for monitoring peak RAM consumption and memory growth."""
