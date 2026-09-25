@@ -27,12 +27,14 @@ class AudioTranscriber:
         model_size: str = "tiny",
         language: Optional[str] = None,
         device: str = "cpu",
-        compute_type: str = "int8"
+        compute_type: str = "int8",
+        cpu_threads: int = 2
     ):
         self.model_size = model_size
         self.language = language
         self.device = device
         self.compute_type = compute_type
+        self.cpu_threads = cpu_threads
         self.model = None
 
     def load_model(self) -> None:
@@ -49,7 +51,9 @@ class AudioTranscriber:
             self.model = WhisperModel(
                 self.model_size,
                 device=self.device,
-                compute_type=self.compute_type
+                compute_type=self.compute_type,
+                cpu_threads=self.cpu_threads,
+                num_workers=1
             )
 
     def unload_model(self) -> None:
@@ -70,12 +74,13 @@ class AudioTranscriber:
         if not os.path.exists(audio_path):
             return ""
 
-        # beam_size=1 (greedy search) for maximum speed and lowest CPU RAM consumption
+        # beam_size=1 (greedy search) & condition_on_previous_text=False for bounded memory & speed
         segments, _ = self.model.transcribe(
             audio_path,
             language=self.language,
             beam_size=1,
-            vad_filter=False  # Audio segments are already pre-cut by VAD
+            vad_filter=False,
+            condition_on_previous_text=False
         )
 
         texts = [seg.text.strip() for seg in segments if seg.text.strip()]

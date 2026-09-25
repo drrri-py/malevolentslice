@@ -93,6 +93,7 @@ def main(ctx):
 @click.option("--transcribe/--no-transcribe", default=True, help="Enable/disable automatic Stage 2 speech-to-text transcription for metadata.csv (default: True).")
 @click.option("--model", "-m", "whisper_model", default="tiny", type=click.Choice(["tiny", "base", "small", "medium"]), help="Whisper model size for transcription (default: 'tiny').")
 @click.option("--language", "-l", default=None, help="Language code for transcription (e.g. 'id', 'en'). Auto-detected if omitted.")
+@click.option("--threads", type=int, default=2, help="CPU threads for Whisper transcription (default: 2, keeps RAM bounded < 200MB).")
 def run_command(
     input_path: Optional[str],
     output_dir: str,
@@ -110,7 +111,8 @@ def run_command(
     quiet: bool,
     transcribe: bool,
     whisper_model: str,
-    language: Optional[str]
+    language: Optional[str],
+    threads: int
 ):
     """Run VAD segmentation pipeline to produce LJSpeech corpus."""
     chosen_wav_subfolder = "" if flat else wav_subfolder
@@ -216,7 +218,7 @@ def run_command(
             lang_label = language if language else "Auto-detect"
             config_table.add_row(
                 "Transcription",
-                f"Enabled (Stage 2) · Model: '{whisper_model}' (INT8 CPU) · Lang: {lang_label}"
+                f"Enabled (Stage 2) · Model: '{whisper_model}' (INT8 CPU, {threads} threads) · Lang: {lang_label}"
             )
 
         config_panel = Panel(
@@ -247,7 +249,8 @@ def run_command(
         log_to_console=False,
         transcribe=transcribe,
         whisper_model=whisper_model,
-        language=language
+        language=language,
+        cpu_threads=threads
     )
 
     # 4. Execution with Interactive Progress Display
@@ -414,12 +417,14 @@ def run_command(
 @click.option("--dataset", "-d", "dataset_dir", default="./dataset/", help="Path to dataset directory containing wavs/ and metadata.csv")
 @click.option("--model", "-m", "model_size", default="tiny", type=click.Choice(["tiny", "base", "small", "medium"]), help="Whisper model size (default: 'tiny').")
 @click.option("--language", "-l", default=None, help="Language code (e.g. 'id' for Indonesian, 'en' for English). Auto-detected if omitted.")
+@click.option("--threads", type=int, default=2, help="CPU threads for Whisper transcription (default: 2, keeps RAM bounded < 200MB).")
 @click.option("--resume/--overwrite", default=True, help="Skip segments that already have real transcripts in metadata.csv (default: resume).")
 @click.option("--quiet", "-q", is_flag=True, help="Run without interactive rich progress display.")
 def transcribe_command(
     dataset_dir: str,
     model_size: str,
     language: Optional[str],
+    threads: int,
     resume: bool,
     quiet: bool
 ):
@@ -480,7 +485,8 @@ def transcribe_command(
         model_size=model_size,
         language=language,
         device="cpu",
-        compute_type="int8"
+        compute_type="int8",
+        cpu_threads=threads
     )
 
     if not quiet:
@@ -496,7 +502,7 @@ def transcribe_command(
         cfg_table.add_column("Key", style="dim magenta", width=22)
         cfg_table.add_column("Value", style="bold white")
         cfg_table.add_row("Dataset Directory", f"{os.path.normpath(dataset_dir)} [dim]({total_files} WAVs)[/dim]")
-        cfg_table.add_row("ASR Model", f"Whisper '{model_size}' (INT8 CPU Quantization)")
+        cfg_table.add_row("ASR Model", f"Whisper '{model_size}' (INT8 CPU, {threads} threads)")
         cfg_table.add_row("Language", lang_label)
         cfg_table.add_row("Mode", mode_label)
         console.print(Panel(cfg_table, title="[bold magenta]Transcriber Configuration[/bold magenta]", box=box.ROUNDED, border_style="magenta", padding=(0, 1)))

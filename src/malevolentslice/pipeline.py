@@ -83,7 +83,8 @@ class Pipeline:
         log_to_console: bool = True,
         transcribe: bool = True,
         whisper_model: str = "tiny",
-        language: Optional[str] = None
+        language: Optional[str] = None,
+        cpu_threads: int = 2
     ):
         self.noise_threshold_db = noise_threshold_db
         self.speech_threshold = speech_threshold
@@ -101,6 +102,7 @@ class Pipeline:
         self.transcribe = transcribe
         self.whisper_model = whisper_model
         self.language = language
+        self.cpu_threads = cpu_threads
         self.logger = get_logger("malevolentslice", log_file=log_file, console_output=log_to_console)
 
     def process_file(
@@ -108,7 +110,9 @@ class Pipeline:
         file_path: str,
         exporter: DatasetExporter,
         progress_callback: Optional[Callable[[float, float], None]] = None,
-        memory_tracker: Optional[MemoryTracker] = None
+        memory_tracker: Optional[MemoryTracker] = None,
+        vad: Optional[SileroVAD] = None,
+        noise_gate: Optional[NoiseGate] = None
     ) -> List[Dict[str, Any]]:
         """
         Process a single audio file end-to-end with bounded memory footprint.
@@ -119,8 +123,11 @@ class Pipeline:
             chunk_buffer_mb=self.chunk_buffer_mb,
             target_sr=self.target_sr
         )
-        noise_gate = NoiseGate(threshold_db=self.noise_threshold_db)
-        vad = SileroVAD(model_path=self.model_path, sample_rate=self.target_sr)
+        gate = noise_gate if noise_gate is not None else NoiseGate(threshold_db=self.noise_threshold_db)
+        is_local_vad = vad is None
+        vad_engine = vad if vad is not None else SileroVAD(model_path=self.model_path, sample_rate=self.target_sr)
+        vad_engine.reset_states()
+
         segmenter = AudioSegmenter(
             speech_threshold=self.speech_threshold,
             min_speech_duration_ms=self.min_speech_duration_ms,
@@ -135,15 +142,15 @@ class Pipeline:
         try:
             for _, audio_chunk, _, _ in streamer.stream_chunks():
                 # Apply fast noise gate
-                gated_chunk = noise_gate.process(audio_chunk)
+                gated_chunk = gate.process(audio_chunk)
                 
                 # Process in 512-sample VAD frames
-                frame_size = vad.frame_size
+                frame_size = vad_engine.frame_size
                 num_frames = len(gated_chunk) // frame_size
 
                 for i in range(num_frames):
                     frame = gated_chunk[i * frame_size : (i + 1) * frame_size]
-                    prob = vad.predict_frame(frame)
+                    prob = vad_engine.predict_frame(frame)
                     segment_arr = segmenter.process_frame(frame, prob)
                     
                     if segment_arr is not None:
@@ -159,7 +166,7 @@ class Pipeline:
                 if rem > 0:
                     pad_frame = np.zeros(frame_size, dtype=np.float32)
                     pad_frame[:rem] = gated_chunk[-rem:]
-                    prob = vad.predict_frame(pad_frame)
+                    prob = vad_engine.predict_frame(pad_frame)
                     segment_arr = segmenter.process_frame(pad_frame, prob)
                     if segment_arr is not None:
                         seg_meta = exporter.export_segment(segment_arr, source_filename=file_path)
@@ -182,6 +189,11 @@ class Pipeline:
                 del final_segment
 
         finally:
+            del streamer
+            del segmenter
+            if is_local_vad:
+                vad_engine.close()
+                del vad_engine
             force_garbage_collection()
 
         return exported_segments
@@ -254,44 +266,54 @@ class Pipeline:
         total_duration_sec = 0.0
         all_exported_segments: List[Dict[str, Any]] = []
 
-        for file_idx, file_path in enumerate(files):
-            self.logger.info(f"Processing [{file_idx + 1}/{len(files)}]: {os.path.basename(file_path)}")
-            
-            def file_progress(frac: float, file_dur: float):
-                if progress_callback:
-                    try:
-                        progress_callback(
-                            os.path.basename(file_path),
-                            frac,
-                            file_dur,
-                            mem_tracker.update(),
-                            file_idx + 1,
-                            len(files)
-                        )
-                    except TypeError:
-                        progress_callback(os.path.basename(file_path), frac, file_dur, mem_tracker.update())
+        # Single shared VAD and NoiseGate instance across all files in Stage 1
+        shared_vad = SileroVAD(model_path=self.model_path, sample_rate=self.target_sr)
+        shared_gate = NoiseGate(threshold_db=self.noise_threshold_db)
 
-            segments = self.process_file(
-                file_path=file_path,
-                exporter=exporter,
-                progress_callback=file_progress,
-                memory_tracker=mem_tracker
-            )
-            total_segments_count += len(segments)
-            if segments:
-                total_duration_sec += sum(s["duration_sec"] for s in segments)
-                all_exported_segments.extend(segments)
+        try:
+            for file_idx, file_path in enumerate(files):
+                self.logger.info(f"Processing [{file_idx + 1}/{len(files)}]: {os.path.basename(file_path)}")
                 
-            force_garbage_collection()
+                def file_progress(frac: float, file_dur: float):
+                    if progress_callback:
+                        try:
+                            progress_callback(
+                                os.path.basename(file_path),
+                                frac,
+                                file_dur,
+                                mem_tracker.update(),
+                                file_idx + 1,
+                                len(files)
+                            )
+                        except TypeError:
+                            progress_callback(os.path.basename(file_path), frac, file_dur, mem_tracker.update())
 
-        # Free all stage 1 audio/VAD resources before loading Whisper
-        force_garbage_collection()
+                segments = self.process_file(
+                    file_path=file_path,
+                    exporter=exporter,
+                    progress_callback=file_progress,
+                    memory_tracker=mem_tracker,
+                    vad=shared_vad,
+                    noise_gate=shared_gate
+                )
+                total_segments_count += len(segments)
+                if segments:
+                    total_duration_sec += sum(s["duration_sec"] for s in segments)
+                    all_exported_segments.extend(segments)
+                    
+                force_garbage_collection()
+        finally:
+            # Explicitly close ONNX session and free VAD/Gate memory before Whisper
+            shared_vad.close()
+            del shared_vad
+            del shared_gate
+            force_garbage_collection()
 
         transcribed_count = 0
         if self.transcribe and all_exported_segments:
             self.logger.info(
                 f"Stage 1 (Slicing) completed ({len(all_exported_segments)} segments). "
-                f"Unloading VAD and starting Stage 2 (Transcription with model '{self.whisper_model}')..."
+                f"VAD unloaded. Starting Stage 2 (Transcription with model '{self.whisper_model}', threads={self.cpu_threads})..."
             )
             from malevolentslice.core.transcriber import AudioTranscriber
 
@@ -299,7 +321,8 @@ class Pipeline:
                 model_size=self.whisper_model,
                 language=self.language,
                 device="cpu",
-                compute_type="int8"
+                compute_type="int8",
+                cpu_threads=self.cpu_threads
             )
 
             wav_items = [{"id": s["segment_id"], "path": s["filepath"]} for s in all_exported_segments]
@@ -316,6 +339,7 @@ class Pipeline:
             )
 
             transcriber.unload_model()
+            del transcriber
             force_garbage_collection()
 
         elapsed = time.time() - start_time

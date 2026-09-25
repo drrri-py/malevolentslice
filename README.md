@@ -163,6 +163,7 @@ malevolentslice transcribe -d ./dataset/ -l id --overwrite
 | `--transcribe / --no-transcribe` | - | `True` | Otomatis menjalankan tahap 2 Speech-to-Text (`faster-whisper` INT8 CPU) untuk mengisi teks asli di `metadata.csv`. |
 | `--model` | `-m` | `tiny` | Ukuran model Whisper (`tiny`, `base`, `small`, `medium`). |
 | `--language` | `-l` | `None` (Otomatis) | Kode bahasa untuk transkripsi (contoh: `id`, `en`). |
+| `--threads` | - | `2` | Jumlah *thread* CPU untuk transkripsi (dibatasi agar RAM tetap hemat < 200MB di semua prosesor). |
 | `--quiet` | `-q` | `False` | Jalankan proses secara senyap tanpa animasi terminal/banner. |
 
 ---

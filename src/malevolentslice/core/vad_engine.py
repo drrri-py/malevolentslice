@@ -106,3 +106,15 @@ class SileroVAD:
             self._c = outs[2]
 
         return prob
+
+    def close(self) -> None:
+        """Explicitly release ONNX Runtime session and state buffers to reclaim memory."""
+        if hasattr(self, "session") and self.session is not None:
+            del self.session
+            self.session = None
+        if hasattr(self, "_state"):
+            del self._state
+        if hasattr(self, "_h"):
+            del self._h
+        if hasattr(self, "_c"):
+            del self._c
