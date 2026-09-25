@@ -3,7 +3,7 @@
 [![PyPI Version](https://img.shields.io/pypi/v/malevolentslice.svg?color=blue)]()
 [![Python Versions](https://img.shields.io/pypi/pyversions/malevolentslice.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/drrri-py/malevolentslice/blob/main/LICENSE)
-[![RAM Footprint](https://img.shields.io/badge/RAM_Footprint-O(1)_%E2%89%A4_100MB-brightgreen.svg)]()
+[![RAM Footprint](https://img.shields.io/badge/RAM_Footprint-O(1)_%E2%89%A4_400MB-brightgreen.svg)]()
 
 > **DESIGN AND IMPLEMENTATION OF A VOICE ACTIVITY DETECTION-BASED AUDIO DATASET SEGMENTATION SYSTEM FOR MEMORY-EFFICIENT TEXT-TO-SPEECH**  
 
@@ -23,27 +23,35 @@ pip install malevolentslice
 
 ### Quick Run:
 ```bash
-# Auto-detect audio in current directory and subfolders (up to 3 levels deep)
+# Slices audio and automatically transcribes with faster-whisper tiny into metadata.csv
 malevolentslice run
 
-# Or specify custom input and output
-malevolentslice run -i ./raw_audio/ -o ./tts_dataset/
+# Or specify custom input, output, and language
+malevolentslice run -i ./raw_audio/ -o ./dataset/ -l id
+
+# Slice only without transcription
+malevolentslice run -i ./raw_audio/ -o ./dataset/ --no-transcribe
+
+# Transcribe an existing sliced dataset directory without re-slicing
+malevolentslice transcribe -d ./dataset/ -l id
 ```
 
 
 ## 📖 Dokumentasi Bahasa Indonesia
 
-`malevolentslice` adalah pustaka (*library*) Python mandiri sekaligus perkakas baris perintah (*Command Line Interface* / CLI) berkinerja tinggi yang dirancang khusus untuk memotong rekaman audio panjang (seperti siniar/podcast, buku audio/*audiobook*, dan rekaman wawancara) menjadi segmen-segmen audio pendek, bersih, dan terstandarisasi yang siap digunakan untuk melatih model AI *Text-to-Speech* (TTS).
+`malevolentslice` adalah pustaka (*library*) Python mandiri sekaligus perkakas baris perintah (*Command Line Interface* / CLI) berkinerja tinggi yang dirancang khusus untuk memotong rekaman audio panjang (seperti siniar/podcast, buku audio/*audiobook*, dan rekaman wawancara) menjadi segmen-segmen audio pendek, bersih, dan terstandarisasi yang siap digunakan untuk melatih model AI *Text-to-Speech* (TTS), lengkap dengan transkripsi teks otomatis ke dalam format LJSpeech `metadata.csv`.
 
 ## 🌟 Fitur Utama
 
-- **Efisiensi Memori Konstan $O(1)$ (RAM $\le 100\text{ MB}$):** Menggunakan generator aliran audio (*streaming generator* via `soundfile.blocks()`) yang membaca data per blok dari penyimpanan sekunder langsung ke penyangga memori, mencegah risiko *Out-of-Memory* (OOM) meskipun memproses audio berdurasi puluhan jam.
+- **Transkripsi Wicara Otomatis Bawaan (*Native Two-Stage ASR*):** Menghasilkan transkrip wicara riil langsung pada `metadata.csv` menggunakan model `faster-whisper` dengan kuantisasi INT8 di CPU. Menggunakan arsitektur dua tahap bergantian (VAD selesai $\rightarrow$ memori dibebaskan $\rightarrow$ Whisper dimuat) sehingga konsumsi RAM tetap sangat rendah ($\le 200 - 300\text{ MB}$).
+- **Efisiensi Memori Konstan $O(1)$:** Menggunakan generator aliran audio (*streaming generator* via `soundfile.blocks()`) yang membaca data per blok dari penyimpanan sekunder langsung ke penyangga memori, mencegah risiko *Out-of-Memory* (OOM) meskipun memproses audio berdurasi puluhan jam.
 - **Pencarian Audio Otomatis & Terbatas (`--max-depth`):** Cukup jalankan `malevolentslice run` tanpa argumen, sistem akan otomatis mendeteksi berkas audio di direktori kerja hingga batas kedalaman bawaan 3 level subfolder (`max_depth = 3`), sambil mengecualikan folder sistem/virtual environment (`.venv`, `.git`, `dataset`, dsb.).
+- **Perintah Transkripsi Mandiri (`malevolentslice transcribe`):** Mentranskripsi ulang folder dataset yang sudah pernah dipotong sebelumnya tanpa harus mengiris ulang audio, lengkap dengan dukungan *resume*.
 - **Hierarki Folder Fleksibel (`--preserve-structure` / `-p`):** Mendukung format standar korpus LJSpeech (semua segmen di `wavs/`), mode datar (`--flat`), maupun pencerminan hierarki subfolder masukan (*mirrored hierarchy*) ke folder luaran.
 - **NumPy Vectorized Noise Gate:** Penapisan awal derau latar (*background noise*) secara instan menggunakan komputasi vektor NumPy tanpa *overhead* komputasi tinggi.
 - **Mesin Deteksi Suara Silero-VAD ONNX:** Inferensi keberadaan wicara presisi tingkat bingkai (*frame-level*) berbasis model Silero-VAD teroptimasi via ONNX Runtime CPU (ringan dan tanpa ketergantungan PyTorch yang berat).
 - **Proteksi Hang-over & Pemotongan Cerdas:** Mencegah pemotongan konsonan akhir kata (*word clipping*) dengan penyangga jeda wicara (*hangover buffer*), serta membatasi durasi segmen ideal TTS ($1.0\text{s} \le t \le 12.0\text{s}$).
-- **Antarmuka Terminal Modern & Pythonic API:** Tampilan CLI interaktif berbasis Rich dengan visualisasi progres real-time, pemantau alokasi RAM aktif dengan ambang batas kestabilan $\le 100\text{ MB}$ `(STABLE)`, serta API Python yang elegan.
+- **Antarmuka Terminal Modern & Pythonic API:** Tampilan CLI interaktif berbasis Rich dengan visualisasi progres real-time per tahap, pemantau alokasi RAM aktif `(STABLE)`, serta API Python yang elegan.
 
 ---
 
@@ -111,6 +119,28 @@ malevolentslice run --flat
 malevolentslice run --max-depth 5
 ```
 
+#### F. Mengatur Bahasa & Model Transkripsi (`-l` / `--language`, `-m` / `--model`)
+Secara *default*, sistem memotong audio sekaligus mentranskripsikannya secara otomatis ke dalam teks asli menggunakan Whisper model `tiny` (INT8 CPU). Anda dapat menyesuaikan bahasa dan model:
+
+```bash
+# Menggunakan Bahasa Indonesia ('id') dengan model Whisper 'base'
+malevolentslice run -i ./rekaman/ -o ./dataset/ -l id -m base
+
+# Hanya memotong audio tanpa transkripsi (mengisi template dummy)
+malevolentslice run -i ./rekaman/ -o ./dataset/ --no-transcribe
+```
+
+#### G. Mentranskripsi Dataset yang Sudah Ada (`malevolentslice transcribe`)
+Jika Anda sudah memiliki folder dataset yang berisi berkas audio hasil potongan dan ingin membuat atau memperbarui `metadata.csv` tanpa memotong ulang audio:
+
+```bash
+# Transkripsi dataset yang ada dengan Bahasa Indonesia (mode resume otomatis)
+malevolentslice transcribe -d ./dataset/ -l id
+
+# Mode overwrite (mentranskripsi ulang seluruh segmen dari awal)
+malevolentslice transcribe -d ./dataset/ -l id --overwrite
+```
+
 ---
 
 ### Daftar Lengkap Opsi CLI (`malevolentslice run --help`)
@@ -142,23 +172,26 @@ malevolentslice run --max-depth 5
 Pustaka `malevolentslice` dapat diintegrasikan dengan mudah ke dalam skrip Python atau alur kerja (*pipeline*) pemrosesan data AI:
 
 ```python
-import malevolentslice
+from malevolentslice import Pipeline
 
-# 1. Inisialisasi Pipeline dengan konfigurasi yang diinginkan
-pipeline = malevolentslice.Pipeline(
+# 1. Inisialisasi Pipeline dengan segmentasi & transkripsi otomatis
+pipeline = Pipeline(
+    transcribe=True,              # Otomatis transkripsi teks wicara riil
+    whisper_model="tiny",         # Model ASR: 'tiny', 'base', 'small', 'medium'
+    language="id",                # Kode bahasa: 'id', 'en', atau None (auto-detect)
     noise_threshold_db=-40.0,
     speech_threshold=0.5,
     min_silence_duration_ms=400.0,
     min_speech_duration_ms=1000.0,
     max_speech_duration_ms=12000.0,
-    chunk_buffer_mb=10.0,
+    chunk_buffer_mb=5.0,
     target_sr=16000,
     max_depth=3,                  # Batas kedalaman pencarian subfolder
     preserve_structure=False,     # Ubah ke True jika ingin memisahkan per subfolder
     wav_subfolder="wavs"
 )
 
-# 2. Jalankan segmentasi pada direktori atau berkas
+# 2. Jalankan pemotongan dan transkripsi
 summary = pipeline.process(
     source="./rekaman_mentah/",
     output_dir="./dataset_tts/"
@@ -167,9 +200,27 @@ summary = pipeline.process(
 # 3. Akses rekapitulasi hasil eksekusi
 print(f"Total berkas diproses : {summary.total_files}")
 print(f"Segmen dihasilkan     : {summary.total_segments}")
+print(f"Segmen ditranskripsi  : {summary.transcribed_segments}")
 print(f"Total durasi wicara   : {summary.total_processed_duration:.2f} detik")
 print(f"Waktu eksekusi        : {summary.elapsed_time:.2f} detik")
 print(f"Konsumsi Puncak RAM   : {summary.peak_memory_mb:.2f} MB")
+```
+
+#### Penggunaan Transcriber Mandiri (`AudioTranscriber`)
+Jika Anda hanya ingin mentranskripsi dataset atau file audio yang sudah ada:
+
+```python
+from malevolentslice.core.transcriber import AudioTranscriber
+
+transcriber = AudioTranscriber(model_size="tiny", language="id")
+
+# Transkripsi 1 berkas audio
+teks = transcriber.transcribe_file("dataset/wavs/segment_000001.wav")
+print("Transkrip:", teks)
+
+# Atau transkripsi daftar berkas langsung ke metadata.csv (LJSpeech standard)
+# transcriber.transcribe_dataset(wav_items, "dataset/metadata.csv", resume=True)
+transcriber.unload_model()
 ```
 
 #### Fitur Pencarian Mandiri (*Standalone Audio Search*)
@@ -200,12 +251,12 @@ dataset/
 
 Format berkas `metadata.csv` (pemisah `|` standar korpus LJSpeech):
 ```csv
-segment_000001|audio segment 000001|audio segment 000001
-segment_000002|audio segment 000002|audio segment 000002
+segment_000001|Halo ini adalah contoh wicara asli hasil transkripsi.|Halo ini adalah contoh wicara asli hasil transkripsi.
+segment_000002|Sistem secara otomatis mengisi teks wicara riil.|Sistem secara otomatis mengisi teks wicara riil.
 ```
 
-> ⚠️ **Catatan Mengenai Transkripsi Teks:**  
-> `malevolentslice` berfokus pada tahap **segmentasi akustik dan pemotongan audio presisi VAD**. Kolom teks pada `metadata.csv` yang dihasilkan adalah **kerangka penampung (*placeholder template*)** agar struktur dataset langsung kompatibel dengan format LJSpeech. Sebelum dimasukkan ke tahap pelatihan (*training*) model TTS, teks tersebut perlu diisi transkrip wicara aslinya (lihat panduan langkah selanjutnya di bawah).
+> 💡 **Transkripsi Wicara Otomatis Terintegrasi:**  
+> `malevolentslice` secara *default* langsung menyertakan transkripsi wicara asli (Speech-to-Text) menggunakan engine `faster-whisper` (INT8 CPU). Format luaran langsung siap pakai untuk pelatihan model TTS (*ready-to-train*) tanpa memerlukan skrip transkripsi pihak ketiga tambahan. Jika Anda hanya menginginkan teks placeholder dummy, jalankan dengan flag `--no-transcribe`.
 
 ### 2. Struktur Hierarki Bercermin (`--preserve-structure` / `-p`)
 ```text
@@ -222,49 +273,22 @@ dataset/
 
 ---
 
-## 🔄 Alur Kerja Lengkap Pembuatan Dataset TTS (*Next Steps*)
+## 🔄 Alur Kerja Pembuatan Dataset TTS (*Pipeline Workflow*)
 
-Untuk melatih model Text-to-Speech (seperti VITS, FastSpeech 2, atau Piper TTS), alur kerja standar kurasi dataset audio adalah sebagai berikut:
+Untuk melatih model Text-to-Speech (seperti VITS, FastSpeech 2, Piper TTS, atau Coqui TTS), `malevolentslice` menangani seluruh alur kurasi secara otomatis dalam satu eksekusi:
 
 ```text
 [ Rekaman Audio Mentah ]
          │
          ▼
-[ 1. Segmentasi via MalevolentSlice ]  ──▶ Menghasilkan folder wavs/ (16kHz PCM) & template metadata.csv
+[ MalevolentSlice (Two-Stage Pipeline) ]
+ ├── Tahap 1: Slicing Akustik VAD (Silero-VAD ONNX) ──▶ Ekspor WAV 16kHz PCM
+ ├── Pembersihan Memori (Garbage Collection)       ──▶ RAM kembali bersih (0 MB VAD overhead)
+ └── Tahap 2: Transkripsi ASR (faster-whisper INT8) ──▶ Tulis teks riil ke metadata.csv
          │
          ▼
-[ 2. Transkripsi Otomatis (ASR) ]      ──▶ Mengisi teks asli (menggunakan Whisper / anotasi manual)
-         │
-         ▼
-[ 3. Pelatihan Model TTS ]             ──▶ Siap dilatih pada VITS, FastSpeech, Coqui TTS, Tacotron
-```
-
-### Contoh Mengisi Transkripsi Otomatis Menggunakan OpenAI Whisper:
-Setelah `malevolentslice` selesai memotong audio, Anda dapat memperbarui `metadata.csv` dengan teks ucapan asli secara otomatis:
-
-```python
-import csv, os
-import whisper
-
-model = whisper.load_model("base")
-metadata_file = "dataset/metadata.csv"
-updated_rows = []
-
-with open(metadata_file, "r", encoding="utf-8") as f:
-    reader = csv.reader(f, delimiter="|")
-    for row in reader:
-        seg_id = row[0]
-        audio_path = os.path.join("dataset", "wavs", f"{seg_id}.wav")
-        if os.path.exists(audio_path):
-            result = model.transcribe(audio_path, language="id")
-            text = result["text"].strip()
-            updated_rows.append([seg_id, text, text])
-
-with open(metadata_file, "w", encoding="utf-8", newline="") as f:
-    writer = csv.writer(f, delimiter="|")
-    writer.writerows(updated_rows)
-
-print("metadata.csv berhasil diperbarui dengan transkrip wicara asli!")
+[ Dataset Korpus LJSpeech Siap Latih ]
+ (Langsung kompatibel dengan VITS, FastSpeech 2, Piper, Coqui TTS, Tacotron 2)
 ```
 
 ---
