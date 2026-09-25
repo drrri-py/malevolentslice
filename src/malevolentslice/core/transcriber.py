@@ -38,7 +38,14 @@ class AudioTranscriber:
     def load_model(self) -> None:
         """Loads the Whisper model into memory if not already loaded."""
         if self.model is None:
-            from faster_whisper import WhisperModel
+            try:
+                from faster_whisper import WhisperModel
+            except ImportError as err:
+                raise ImportError(
+                    "Pustaka 'faster-whisper' belum terinstal. Silakan jalankan 'pip install faster-whisper' "
+                    "atau instal ulang paket dengan 'pip install malevolentslice --upgrade'."
+                ) from err
+
             self.model = WhisperModel(
                 self.model_size,
                 device=self.device,

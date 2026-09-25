@@ -1,6 +1,6 @@
 [project]
 name = "malevolentslice"
-version = "0.1.2"
+version = "0.1.3"
 description = "Memory-efficient VAD-based audio dataset segmentation for TTS training"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -40,6 +40,7 @@ dependencies = [
     "click>=8.0.0",
     "rich>=13.0.0",
     "psutil>=5.9.0",
+    "faster-whisper>=1.0.0",
 ]
 
 [project.urls]
@@ -54,9 +55,6 @@ dev = [
     "memory-profiler>=0.61.0",
     "flake8>=6.0.0",
     "black>=23.0.0",
-]
-asr = [
-    "faster-whisper>=1.0.0",
 ]
 
 [project.scripts]

@@ -15,7 +15,7 @@ from malevolentslice.core import (
 )
 from malevolentslice.utils import force_garbage_collection, get_memory_usage_mb
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 
 __all__ = [
     "Pipeline",
