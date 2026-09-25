@@ -3,6 +3,7 @@ from malevolentslice.core.noise_gate import NoiseGate, apply_noise_gate
 from malevolentslice.core.vad_engine import SileroVAD
 from malevolentslice.core.segmenter import AudioSegmenter
 from malevolentslice.core.exporter import DatasetExporter
+from malevolentslice.core.transcriber import AudioTranscriber
 
 __all__ = [
     "AudioStreamer",
@@ -12,4 +13,5 @@ __all__ = [
     "SileroVAD",
     "AudioSegmenter",
     "DatasetExporter",
+    "AudioTranscriber",
 ]

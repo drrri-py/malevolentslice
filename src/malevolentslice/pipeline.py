@@ -58,6 +58,7 @@ class PipelineSummary:
     elapsed_time: float
     peak_memory_mb: float
     memory_growth_mb: float
+    transcribed_segments: int = 0
 
 class Pipeline:
     """
@@ -79,7 +80,10 @@ class Pipeline:
         preserve_structure: bool = False,
         model_path: Optional[str] = None,
         log_file: Optional[str] = None,
-        log_to_console: bool = True
+        log_to_console: bool = True,
+        transcribe: bool = True,
+        whisper_model: str = "tiny",
+        language: Optional[str] = None
     ):
         self.noise_threshold_db = noise_threshold_db
         self.speech_threshold = speech_threshold
@@ -94,6 +98,9 @@ class Pipeline:
         self.preserve_structure = preserve_structure
         self.model_path = model_path
         self.log_to_console = log_to_console
+        self.transcribe = transcribe
+        self.whisper_model = whisper_model
+        self.language = language
         self.logger = get_logger("malevolentslice", log_file=log_file, console_output=log_to_console)
 
     def process_file(
@@ -184,7 +191,8 @@ class Pipeline:
         source: Optional[Union[str, List[str]]] = None,
         output_dir: str = "./dataset/",
         max_depth: Optional[int] = None,
-        progress_callback: Optional[Callable[[str, float, float, float], None]] = None
+        progress_callback: Optional[Callable[[str, float, float, float], None]] = None,
+        transcription_callback: Optional[Callable[[int, int, str, str, float], None]] = None
     ) -> PipelineSummary:
         """
         Process a list of audio files or a directory of raw audio recordings up to max_depth.
@@ -231,7 +239,8 @@ class Pipeline:
                 total_processed_duration=0.0,
                 elapsed_time=time.time() - start_time,
                 peak_memory_mb=mem_tracker.get_peak_mb(),
-                memory_growth_mb=mem_tracker.get_growth_mb()
+                memory_growth_mb=mem_tracker.get_growth_mb(),
+                transcribed_segments=0
             )
 
         exporter = DatasetExporter(
@@ -243,6 +252,7 @@ class Pipeline:
         )
         total_segments_count = 0
         total_duration_sec = 0.0
+        all_exported_segments: List[Dict[str, Any]] = []
 
         for file_idx, file_path in enumerate(files):
             self.logger.info(f"Processing [{file_idx + 1}/{len(files)}]: {os.path.basename(file_path)}")
@@ -270,7 +280,42 @@ class Pipeline:
             total_segments_count += len(segments)
             if segments:
                 total_duration_sec += sum(s["duration_sec"] for s in segments)
+                all_exported_segments.extend(segments)
                 
+            force_garbage_collection()
+
+        # Free all stage 1 audio/VAD resources before loading Whisper
+        force_garbage_collection()
+
+        transcribed_count = 0
+        if self.transcribe and all_exported_segments:
+            self.logger.info(
+                f"Stage 1 (Slicing) completed ({len(all_exported_segments)} segments). "
+                f"Unloading VAD and starting Stage 2 (Transcription with model '{self.whisper_model}')..."
+            )
+            from malevolentslice.core.transcriber import AudioTranscriber
+
+            transcriber = AudioTranscriber(
+                model_size=self.whisper_model,
+                language=self.language,
+                device="cpu",
+                compute_type="int8"
+            )
+
+            wav_items = [{"id": s["segment_id"], "path": s["filepath"]} for s in all_exported_segments]
+
+            def trans_cb(idx: int, total: int, seg_id: str, text: str, ram: float):
+                if transcription_callback:
+                    transcription_callback(idx, total, seg_id, text, mem_tracker.update())
+
+            transcribed_count = transcriber.transcribe_dataset(
+                wav_items=wav_items,
+                output_metadata_path=exporter.metadata_path,
+                progress_callback=trans_cb,
+                resume=False
+            )
+
+            transcriber.unload_model()
             force_garbage_collection()
 
         elapsed = time.time() - start_time
@@ -288,5 +333,6 @@ class Pipeline:
             total_processed_duration=total_duration_sec,
             elapsed_time=elapsed,
             peak_memory_mb=peak_ram,
-            memory_growth_mb=growth_ram
+            memory_growth_mb=growth_ram,
+            transcribed_segments=transcribed_count
         )

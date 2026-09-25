@@ -122,7 +122,7 @@ malevolentslice run --max-depth 5
 | `--threshold` | `-t` | `-40.0` | Ambang batas Noise Gate dalam satuan desibel (dB). |
 | `--speech-threshold` | - | `0.5` | Ambang batas probabilitas wicara model VAD ($0.0 - 1.0$). |
 | `--silence` | `-s` | `400.0` | Batas jeda hening minimum pemisah segmen (milidetik). |
-| `--buffer` | `-b` | `10.0` | Ukuran penyangga blok streaming data audio (MB). |
+| `--buffer` | `-b` | `5.0` | Ukuran penyangga blok streaming data audio (MB). |
 | `--min-speech` | - | `1000.0` | Durasi segmen wicara minimum yang diekspor (milidetik). |
 | `--max-speech` | - | `12000.0` | Durasi segmen wicara maksimum yang diekspor (milidetik). |
 | `--sr` | - | `16000` | Frekuensi sampel target audio luaran (Hz). |
@@ -130,6 +130,9 @@ malevolentslice run --max-depth 5
 | `--flat` | - | `False` | Simpan berkas WAV langsung di *root* folder tanpa subfolder `wavs/`. |
 | `--preserve-structure`| `-p` | `False` | Cerminkan susunan hierarki subfolder masukan ke folder luaran. |
 | `--max-depth` | - | `3` | Batas kedalaman penelusuran subfolder audio. |
+| `--transcribe / --no-transcribe` | - | `True` | Otomatis menjalankan tahap 2 Speech-to-Text (`faster-whisper` INT8 CPU) untuk mengisi teks asli di `metadata.csv`. |
+| `--model` | `-m` | `tiny` | Ukuran model Whisper (`tiny`, `base`, `small`, `medium`). |
+| `--language` | `-l` | `None` (Otomatis) | Kode bahasa untuk transkripsi (contoh: `id`, `en`). |
 | `--quiet` | `-q` | `False` | Jalankan proses secara senyap tanpa animasi terminal/banner. |
 
 ---
