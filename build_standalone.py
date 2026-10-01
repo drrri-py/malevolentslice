@@ -54,7 +54,7 @@ def create_macos_dmg(dist_dir: Path, app_name: str) -> Optional[Path]:
         ]
         res = subprocess.run(cmd, capture_output=True, text=True)
         if res.returncode == 0:
-            print(f"[✔] DMG Installer created: {dmg_path.resolve()}")
+            print(f"[OK] DMG Installer created: {dmg_path.resolve()}")
             return dmg_path
         else:
             print(f"[!] hdiutil error: {res.stderr}")
@@ -65,6 +65,12 @@ def create_macos_dmg(dist_dir: Path, app_name: str) -> Optional[Path]:
 
 
 def main():
+    if sys.platform.startswith("win"):
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        if hasattr(sys.stderr, "reconfigure"):
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
     parser = argparse.ArgumentParser(description="Build MalevolentSlice Desktop Standalone Executable & Installers")
     parser.add_argument("--onefile", action="store_true", help="Package into a single standalone binary file instead of a folder")
     parser.add_argument("--clean", action="store_true", help="Clean build and dist directories before packaging")
@@ -183,15 +189,15 @@ def main():
     if sys.platform == "darwin":
         app_bundle = dist_dir / f"{args.name}.app"
         if app_bundle.exists():
-            print(f"[✔] macOS Application Bundle: {app_bundle}")
+            print(f"[OK] macOS Application Bundle: {app_bundle}")
             if args.dmg and not args.onefile:
                 create_macos_dmg(dist_dir, args.name)
     elif sys.platform.startswith("win"):
         exe_file = dist_dir / f"{args.name}.exe" if args.onefile else dist_dir / args.name / f"{args.name}.exe"
-        print(f"[✔] Windows Executable: {exe_file}")
+        print(f"[OK] Windows Executable: {exe_file}")
     else:
         bin_file = dist_dir / args.name / args.name if not args.onefile else dist_dir / args.name
-        print(f"[✔] Linux Binary: {bin_file}")
+        print(f"[OK] Linux Binary: {bin_file}")
 
     print("\nTip: Standalone distribution does not require Python or command line to run.")
 
