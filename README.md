@@ -43,6 +43,7 @@ malevolentslice transcribe -d ./dataset/ -l id
 
 ## 🌟 Fitur Utama
 
+- **Antarmuka Desktop Modern (CustomTkinter GUI):** Aplikasi desktop `malevolentslice-gui` bertema dark mode dengan kontrol slider interaktif, pemilihan model Silero VAD (v4 & v5), dual progress bar, pemantau memori RAM real-time, serta log konsol terintegrasi.
 - **Transkripsi Wicara Otomatis Bawaan (*Native Two-Stage ASR*):** Menghasilkan transkrip wicara riil langsung pada `metadata.csv` menggunakan model `faster-whisper` dengan kuantisasi INT8 di CPU. Menggunakan arsitektur dua tahap bergantian (VAD selesai $\rightarrow$ memori dibebaskan $\rightarrow$ Whisper dimuat) sehingga konsumsi RAM tetap sangat rendah ($\le 200 - 300\text{ MB}$).
 - **Efisiensi Memori Konstan $O(1)$:** Menggunakan generator aliran audio (*streaming generator* via `soundfile.blocks()`) yang membaca data per blok dari penyimpanan sekunder langsung ke penyangga memori, mencegah risiko *Out-of-Memory* (OOM) meskipun memproses audio berdurasi puluhan jam.
 - **Pencarian Audio Otomatis & Terbatas (`--max-depth`):** Cukup jalankan `malevolentslice run` tanpa argumen, sistem akan otomatis mendeteksi berkas audio di direktori kerja hingga batas kedalaman bawaan 3 level subfolder (`max_depth = 3`), sambil mengecualikan folder sistem/virtual environment (`.venv`, `.git`, `dataset`, dsb.).
@@ -61,7 +62,14 @@ Pastikan Anda menggunakan Python versi 3.8 atau lebih baru:
 
 ### Pengguna Akhir (via PyPI)
 ```bash
+# Instal versi standar (CLI only)
 pip install malevolentslice
+
+# Atau instal dengan dukungan antarmuka grafis Desktop GUI
+pip install "malevolentslice[gui]"
+
+# Menjalankan antarmuka grafis Desktop
+malevolentslice-gui
 ```
 
 ### Mode Pengembangan (Development)

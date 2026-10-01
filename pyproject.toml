@@ -1,6 +1,6 @@
 [project]
 name = "malevolentslice"
-version = "0.1.5"
+version = "0.2.0"
 description = "Memory-efficient VAD-based audio dataset segmentation for TTS training"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -56,9 +56,13 @@ dev = [
     "flake8>=6.0.0",
     "black>=23.0.0",
 ]
+gui = [
+    "customtkinter>=5.2.0",
+]
 
 [project.scripts]
 malevolentslice = "malevolentslice.cli:main"
+malevolentslice-gui = "malevolentslice.gui.app:main"
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]

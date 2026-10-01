@@ -4,41 +4,15 @@ import numpy as np
 import onnxruntime as ort
 from typing import Optional, Dict, Any
 
-SILERO_VAD_URL = "https://raw.githubusercontent.com/snakers4/silero-vad/v4.0/files/silero_vad.onnx"
-DEFAULT_MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "..", "assets", "silero_vad.onnx")
+from malevolentslice.utils.path_resolver import resolve_or_download_vad_model, resolve_asset_path
 
 def ensure_model_exists(model_path: Optional[str] = None) -> str:
     """
-    Ensures that the Silero VAD ONNX model file exists.
-    Checks user-specified path, local project assets, package assets, and ~/.cache/malevolentslice.
-    Downloads automatically to user cache if not found locally.
+    Ensures that the Silero VAD ONNX model file exists using the robust path resolver.
+    Checks PyInstaller bundle, package assets, repo assets, and user cache directory.
+    Downloads automatically if not found locally.
     """
-    if model_path:
-        abs_path = os.path.abspath(model_path)
-        if os.path.exists(abs_path):
-            return abs_path
-
-    # 1. Check local repository assets directory
-    local_assets = os.path.abspath(DEFAULT_MODEL_PATH)
-    if os.path.exists(local_assets):
-        return local_assets
-
-    # 2. Check package-internal assets directory
-    pkg_assets = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "assets", "silero_vad.onnx"))
-    if os.path.exists(pkg_assets):
-        return pkg_assets
-
-    # 3. Check user cache directory (~/.cache/malevolentslice/silero_vad.onnx)
-    cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "malevolentslice")
-    cache_path = os.path.join(cache_dir, "silero_vad.onnx")
-    if os.path.exists(cache_path):
-        return cache_path
-
-    # 4. Download into user cache directory
-    os.makedirs(cache_dir, exist_ok=True)
-    print(f"[malevolentslice] Downloading Silero VAD ONNX model to {cache_path}...")
-    urllib.request.urlretrieve(SILERO_VAD_URL, cache_path)
-    return cache_path
+    return resolve_or_download_vad_model(model_path)
 
 class SileroVAD:
     """
@@ -68,6 +42,8 @@ class SileroVAD:
         """Reset internal recurrent state tensors for a new audio stream."""
         if self.is_v5:
             self._state = np.zeros((2, 1, 128), dtype=np.float32)
+            context_size = 64 if self.sample_rate == 16000 else 32
+            self._context = np.zeros((1, context_size), dtype=np.float32)
         else:
             self._h = np.zeros((2, 1, 64), dtype=np.float32)
             self._c = np.zeros((2, 1, 64), dtype=np.float32)
@@ -85,14 +61,18 @@ class SileroVAD:
         sr_tensor = np.array(self.sample_rate, dtype=np.int64)
 
         if self.is_v5:
+            # Silero VAD v5 requires a 64-sample rolling temporal context buffer (576 samples total)
+            model_input = np.concatenate([self._context, tensor_frame], axis=1).astype(np.float32)
             feed: Dict[str, Any] = {
-                'input': tensor_frame,
+                'input': model_input,
                 'state': self._state,
                 'sr': sr_tensor
             }
             outs = self.session.run(None, feed)
-            prob = float(outs[0][0][0])
+            prob = float(outs[0].flat[0])
             self._state = outs[1]
+            context_size = 64 if self.sample_rate == 16000 else 32
+            self._context = model_input[:, -context_size:]
         else:
             feed = {
                 'input': tensor_frame,
@@ -101,7 +81,7 @@ class SileroVAD:
                 'c': self._c
             }
             outs = self.session.run(None, feed)
-            prob = float(outs[0][0][0])
+            prob = float(outs[0].flat[0])
             self._h = outs[1]
             self._c = outs[2]
 

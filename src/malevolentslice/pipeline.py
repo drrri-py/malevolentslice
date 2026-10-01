@@ -72,6 +72,8 @@ class Pipeline:
         min_silence_duration_ms: float = 400.0,
         min_speech_duration_ms: float = 1000.0,
         max_speech_duration_ms: float = 12000.0,
+        speech_pad_ms: float = 250.0,
+        enable_noise_gate: bool = True,
         chunk_buffer_mb: float = 5.0,
         export_format: str = "wav",
         target_sr: int = 16000,
@@ -84,13 +86,17 @@ class Pipeline:
         transcribe: bool = True,
         whisper_model: str = "tiny",
         language: Optional[str] = None,
-        cpu_threads: int = 2
+        cpu_threads: int = 2,
+        device: str = "cpu",
+        compute_type: str = "int8"
     ):
         self.noise_threshold_db = noise_threshold_db
         self.speech_threshold = speech_threshold
         self.min_silence_duration_ms = min_silence_duration_ms
         self.min_speech_duration_ms = min_speech_duration_ms
         self.max_speech_duration_ms = max_speech_duration_ms
+        self.speech_pad_ms = speech_pad_ms
+        self.enable_noise_gate = enable_noise_gate
         self.chunk_buffer_mb = chunk_buffer_mb
         self.export_format = export_format
         self.target_sr = target_sr
@@ -103,6 +109,8 @@ class Pipeline:
         self.whisper_model = whisper_model
         self.language = language
         self.cpu_threads = cpu_threads
+        self.device = device
+        self.compute_type = compute_type
         self.logger = get_logger("malevolentslice", log_file=log_file, console_output=log_to_console)
 
     def process_file(
@@ -112,7 +120,8 @@ class Pipeline:
         progress_callback: Optional[Callable[[float, float], None]] = None,
         memory_tracker: Optional[MemoryTracker] = None,
         vad: Optional[SileroVAD] = None,
-        noise_gate: Optional[NoiseGate] = None
+        noise_gate: Optional[NoiseGate] = None,
+        is_cancelled: Optional[Callable[[], bool]] = None
     ) -> List[Dict[str, Any]]:
         """
         Process a single audio file end-to-end with bounded memory footprint.
@@ -123,17 +132,28 @@ class Pipeline:
             chunk_buffer_mb=self.chunk_buffer_mb,
             target_sr=self.target_sr
         )
-        gate = noise_gate if noise_gate is not None else NoiseGate(threshold_db=self.noise_threshold_db)
+        if noise_gate is not None:
+            gate = noise_gate
+        elif self.enable_noise_gate:
+            gate = NoiseGate(threshold_db=self.noise_threshold_db)
+        else:
+            gate = None
+
         is_local_vad = vad is None
         vad_engine = vad if vad is not None else SileroVAD(model_path=self.model_path, sample_rate=self.target_sr)
         vad_engine.reset_states()
+
+        frame_duration_ms = (vad_engine.frame_size / float(self.target_sr)) * 1000.0
+        hangover_frames = max(0, int(round(self.speech_pad_ms / frame_duration_ms)))
 
         segmenter = AudioSegmenter(
             speech_threshold=self.speech_threshold,
             min_speech_duration_ms=self.min_speech_duration_ms,
             max_speech_duration_ms=self.max_speech_duration_ms,
             min_silence_duration_ms=self.min_silence_duration_ms,
-            sample_rate=self.target_sr
+            hangover_frames=hangover_frames,
+            sample_rate=self.target_sr,
+            frame_size=vad_engine.frame_size
         )
 
         exported_segments: List[Dict[str, Any]] = []
@@ -141,8 +161,11 @@ class Pipeline:
         
         try:
             for _, audio_chunk, _, _ in streamer.stream_chunks():
-                # Apply fast noise gate
-                gated_chunk = gate.process(audio_chunk)
+                if is_cancelled and is_cancelled():
+                    break
+
+                # Apply fast noise gate if enabled
+                gated_chunk = gate.process(audio_chunk) if gate is not None else audio_chunk
                 
                 # Process in 512-sample VAD frames
                 frame_size = vad_engine.frame_size
@@ -204,7 +227,8 @@ class Pipeline:
         output_dir: str = "./dataset/",
         max_depth: Optional[int] = None,
         progress_callback: Optional[Callable[[str, float, float, float], None]] = None,
-        transcription_callback: Optional[Callable[[int, int, str, str, float], None]] = None
+        transcription_callback: Optional[Callable[[int, int, str, str, float], None]] = None,
+        is_cancelled: Optional[Callable[[], bool]] = None
     ) -> PipelineSummary:
         """
         Process a list of audio files or a directory of raw audio recordings up to max_depth.
@@ -268,10 +292,14 @@ class Pipeline:
 
         # Single shared VAD and NoiseGate instance across all files in Stage 1
         shared_vad = SileroVAD(model_path=self.model_path, sample_rate=self.target_sr)
-        shared_gate = NoiseGate(threshold_db=self.noise_threshold_db)
+        shared_gate = NoiseGate(threshold_db=self.noise_threshold_db) if self.enable_noise_gate else None
 
         try:
             for file_idx, file_path in enumerate(files):
+                if is_cancelled and is_cancelled():
+                    self.logger.info("Pipeline cancelled by user during Stage 1 (Slicing).")
+                    break
+
                 self.logger.info(f"Processing [{file_idx + 1}/{len(files)}]: {os.path.basename(file_path)}")
                 
                 def file_progress(frac: float, file_dur: float):
@@ -294,7 +322,8 @@ class Pipeline:
                     progress_callback=file_progress,
                     memory_tracker=mem_tracker,
                     vad=shared_vad,
-                    noise_gate=shared_gate
+                    noise_gate=shared_gate,
+                    is_cancelled=is_cancelled
                 )
                 total_segments_count += len(segments)
                 if segments:
@@ -306,22 +335,24 @@ class Pipeline:
             # Explicitly close ONNX session and free VAD/Gate memory before Whisper
             shared_vad.close()
             del shared_vad
-            del shared_gate
+            if shared_gate is not None:
+                del shared_gate
             force_garbage_collection()
 
         transcribed_count = 0
-        if self.transcribe and all_exported_segments:
+        was_cancelled = is_cancelled and is_cancelled()
+        if not was_cancelled and self.transcribe and all_exported_segments:
             self.logger.info(
                 f"Stage 1 (Slicing) completed ({len(all_exported_segments)} segments). "
-                f"VAD unloaded. Starting Stage 2 (Transcription with model '{self.whisper_model}', threads={self.cpu_threads})..."
+                f"VAD unloaded. Starting Stage 2 (Transcription with model '{self.whisper_model}', device={self.device}, compute={self.compute_type}, threads={self.cpu_threads})..."
             )
             from malevolentslice.core.transcriber import AudioTranscriber
 
             transcriber = AudioTranscriber(
                 model_size=self.whisper_model,
                 language=self.language,
-                device="cpu",
-                compute_type="int8",
+                device=self.device,
+                compute_type=self.compute_type,
                 cpu_threads=self.cpu_threads
             )
 
@@ -335,7 +366,8 @@ class Pipeline:
                 wav_items=wav_items,
                 output_metadata_path=exporter.metadata_path,
                 progress_callback=trans_cb,
-                resume=False
+                resume=False,
+                is_cancelled=is_cancelled
             )
 
             transcriber.unload_model()

@@ -13,7 +13,31 @@ logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
 warnings.filterwarnings("ignore", message=".*unauthenticated requests.*")
 
 from malevolentslice.utils.memory import force_garbage_collection, get_memory_usage_mb
+from malevolentslice.utils.path_resolver import get_models_cache_dir
 
+def is_asr_model_cached(model_size: str, cache_dir: Optional[str] = None) -> bool:
+    """
+    Checks if the specified Whisper model variant is already cached locally.
+    Does not initiate network connections.
+    """
+    if not model_size or model_size.lower() in ("none", "disabled", "false"):
+        return True
+    try:
+        from faster_whisper import download_model
+        download_model(model_size, output_dir=cache_dir, local_files_only=True)
+        return True
+    except Exception:
+        return False
+
+def download_asr_model(model_size: str, cache_dir: Optional[str] = None) -> str:
+    """
+    Downloads the specified Whisper model variant to local cache.
+    Returns the path to the downloaded model directory.
+    """
+    if not model_size or model_size.lower() in ("none", "disabled", "false"):
+        return ""
+    from faster_whisper import download_model
+    return download_model(model_size, output_dir=cache_dir, local_files_only=False)
 
 class AudioTranscriber:
     """
@@ -28,13 +52,15 @@ class AudioTranscriber:
         language: Optional[str] = None,
         device: str = "cpu",
         compute_type: str = "int8",
-        cpu_threads: int = 2
+        cpu_threads: int = 2,
+        download_root: Optional[str] = None
     ):
         self.model_size = model_size
         self.language = language
         self.device = device
         self.compute_type = compute_type
         self.cpu_threads = cpu_threads
+        self.download_root = download_root
         self.model = None
 
     def load_model(self) -> None:
@@ -60,6 +86,7 @@ class AudioTranscriber:
                 device=self.device,
                 compute_type=self.compute_type,
                 cpu_threads=self.cpu_threads,
+                download_root=self.download_root,
                 num_workers=1
             )
 
@@ -98,7 +125,8 @@ class AudioTranscriber:
         wav_items: List[Dict[str, str]],
         output_metadata_path: str,
         progress_callback: Optional[Callable[[int, int, str, str, float], None]] = None,
-        resume: bool = False
+        resume: bool = False,
+        is_cancelled: Optional[Callable[[], bool]] = None
     ) -> int:
         """
         Transcribes a list of audio items and writes to LJSpeech metadata.csv.
@@ -138,6 +166,9 @@ class AudioTranscriber:
             writer = csv.writer(f_out, delimiter="|")
 
             for idx, item in enumerate(wav_items, start=1):
+                if is_cancelled and is_cancelled():
+                    break
+
                 seg_id = item["id"]
                 wav_path = item["path"]
 
