@@ -15,29 +15,69 @@ warnings.filterwarnings("ignore", message=".*unauthenticated requests.*")
 from malevolentslice.utils.memory import force_garbage_collection, get_memory_usage_mb
 from malevolentslice.utils.path_resolver import get_models_cache_dir
 
+def get_whisper_cache_dir(model_size: str) -> str:
+    """Returns the dedicated directory for storing physical Whisper model files."""
+    return os.path.join(get_models_cache_dir(), "whisper", model_size)
+
+def is_model_dir_valid(model_dir: Optional[str]) -> bool:
+    """
+    Checks if a model directory has all essential files and valid non-empty model.bin.
+    Guards against 0-byte or broken NTFS symlinks on Windows.
+    """
+    if not model_dir or not os.path.isdir(model_dir):
+        return False
+    model_bin = os.path.join(model_dir, "model.bin")
+    config_json = os.path.join(model_dir, "config.json")
+    if not (os.path.isfile(model_bin) and os.path.isfile(config_json)):
+        return False
+    try:
+        # model.bin must be a real file with size > 1MB
+        return os.path.getsize(model_bin) > 1024 * 1024
+    except Exception:
+        return False
+
 def is_asr_model_cached(model_size: str, cache_dir: Optional[str] = None) -> bool:
     """
     Checks if the specified Whisper model variant is already cached locally.
-    Does not initiate network connections.
+    Validates physical file integrity to guard against corrupt or broken symlinks.
     """
     if not model_size or model_size.lower() in ("none", "disabled", "false"):
         return True
+    
+    # 1. Check dedicated malevolentslice cache
+    target_dir = cache_dir or get_whisper_cache_dir(model_size)
+    if is_model_dir_valid(target_dir):
+        return True
+
+    # 2. Check Hugging Face hub snapshot cache
     try:
         from faster_whisper import download_model
-        download_model(model_size, output_dir=cache_dir, local_files_only=True)
-        return True
+        hf_path = download_model(model_size, output_dir=cache_dir, local_files_only=True)
+        if is_model_dir_valid(hf_path):
+            return True
     except Exception:
-        return False
+        pass
+
+    return False
 
 def download_asr_model(model_size: str, cache_dir: Optional[str] = None) -> str:
     """
     Downloads the specified Whisper model variant to local cache.
+    Ensures real physical files are saved (no symlinks) to avoid Windows reparse point issues.
     Returns the path to the downloaded model directory.
     """
     if not model_size or model_size.lower() in ("none", "disabled", "false"):
         return ""
+    
+    target_dir = cache_dir or get_whisper_cache_dir(model_size)
+    if is_model_dir_valid(target_dir):
+        return target_dir
+
+    os.makedirs(target_dir, exist_ok=True)
     from faster_whisper import download_model
-    return download_model(model_size, output_dir=cache_dir, local_files_only=False)
+    # Passing output_dir forces faster-whisper to set local_dir_use_symlinks=False
+    downloaded_path = download_model(model_size, output_dir=target_dir, local_files_only=False)
+    return downloaded_path
 
 class AudioTranscriber:
     """
@@ -81,12 +121,29 @@ class AudioTranscriber:
                     "atau instal ulang paket dengan 'pip install malevolentslice --upgrade'."
                 ) from err
 
+            # Resolve model path: prefer dedicated cache with validated physical files
+            target_model = self.model_size
+            dedicated_dir = self.download_root or get_whisper_cache_dir(self.model_size)
+
+            if is_model_dir_valid(dedicated_dir):
+                target_model = dedicated_dir
+            elif os.path.isdir(self.model_size) and is_model_dir_valid(self.model_size):
+                target_model = self.model_size
+            else:
+                try:
+                    target_model = download_asr_model(self.model_size, cache_dir=dedicated_dir)
+                except Exception as dl_err:
+                    logging.getLogger("malevolentslice").warning(
+                        f"Direct model download to '{dedicated_dir}' failed ({dl_err}), falling back to default download..."
+                    )
+                    target_model = self.model_size
+
             self.model = WhisperModel(
-                self.model_size,
+                target_model,
                 device=self.device,
                 compute_type=self.compute_type,
                 cpu_threads=self.cpu_threads,
-                download_root=self.download_root,
+                download_root=dedicated_dir if not os.path.isdir(target_model) else None,
                 num_workers=1
             )
 
