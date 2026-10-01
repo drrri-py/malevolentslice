@@ -2,6 +2,8 @@ name: Build Standalone Installers (DMG & EXE)
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
@@ -9,7 +11,7 @@ on:
 jobs:
   build-macos:
     name: Build macOS (.dmg)
-    runs-on: macos-13
+    runs-on: macos-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -57,11 +59,13 @@ jobs:
         run: |
           python build_standalone.py --clean
 
-      - name: Compile Inno Setup Installer (.exe)
-        uses: Miniong/setup-inno-setup@v1
+      - name: Install Inno Setup
+        run: |
+          choco install innosetup --yes --no-progress
+
       - name: Build Setup.exe with Inno Setup
         run: |
-          iscc windows_installer.iss
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" windows_installer.iss
 
       - name: Upload Windows Setup.exe
         uses: actions/upload-artifact@v4
